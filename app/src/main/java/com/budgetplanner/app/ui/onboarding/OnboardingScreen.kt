@@ -3,10 +3,18 @@
 package com.budgetplanner.app.ui.onboarding
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,16 +25,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -36,23 +48,38 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.budgetplanner.app.presentation.OnboardingExpense
 import com.budgetplanner.app.presentation.OnboardingIncome
 import com.budgetplanner.app.ui.components.AmountField
+import com.budgetplanner.app.ui.components.CategoryAvatar
 import com.budgetplanner.app.ui.components.DayOfMonthPicker
-import com.budgetplanner.app.ui.components.SecondaryText
+import com.budgetplanner.app.ui.components.GroupCard
+import com.budgetplanner.app.ui.components.InlineAmountField
+import com.budgetplanner.app.ui.components.IosEasing
+import com.budgetplanner.app.ui.components.PickerPill
+import com.budgetplanner.app.ui.components.PrimaryButton
+import com.budgetplanner.app.ui.components.RowDivider
+import com.budgetplanner.app.ui.components.SegmentedChoice
+import com.budgetplanner.app.ui.components.TextAction
 import com.budgetplanner.app.ui.components.WeekdayPicker
 import com.budgetplanner.app.ui.components.parseAmount
-import com.budgetplanner.app.ui.components.ThousandsTransformation
+import com.budgetplanner.app.ui.theme.AppText
+import com.budgetplanner.app.ui.theme.BudgetTheme
 import com.budgetplanner.domain.model.Currency
 import com.budgetplanner.domain.model.Frequency
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import java.time.DayOfWeek
 
 private val incomeTitles = listOf("Зарплата", "Подработка", "Фриланс")
 private val expenseNames = listOf("Жильё", "Кредиты", "Продукты", "Транспорт", "Другое")
+private val expenseIcons = mapOf(
+    "Жильё" to "home", "Кредиты" to "credit", "Продукты" to "cart", "Транспорт" to "transport", "Другое" to "other",
+)
 
 @Composable
 fun OnboardingScreen(
@@ -60,6 +87,7 @@ fun OnboardingScreen(
     onFinish: (OnboardingIncome?, List<OnboardingExpense>) -> Unit,
     onSkip: () -> Unit,
 ) {
+    val c = BudgetTheme.colors
     var step by remember { mutableIntStateOf(0) }
 
     var incomeTitle by remember { mutableStateOf(incomeTitles.first()) }
@@ -69,26 +97,25 @@ fun OnboardingScreen(
     var incomeDayOfWeek by remember { mutableStateOf(DayOfWeek.FRIDAY) }
     val expenseDigits = remember { mutableStateMapOf<String, String>() }
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .systemBarsPadding()
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onSkip) { Text("Пропустить") }
+    Box(Modifier.fillMaxSize().background(c.background)) {
+        Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+                TextAction("Пропустить", onClick = onSkip, color = c.blue)
             }
-            Spacer(Modifier.height(8.dp))
 
             AnimatedContent(
                 targetState = step,
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                transitionSpec = {
+                    val dir = if (targetState > initialState) 1 else -1
+                    (slideInHorizontally(tween(420, easing = IosEasing)) { it * dir / 3 } + fadeIn(tween(300))) togetherWith
+                        (slideOutHorizontally(tween(420, easing = IosEasing)) { -it * dir / 3 } + fadeOut(tween(160)))
+                },
                 label = "onboarding-step",
             ) { current ->
-                Column(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+                ) {
                     when (current) {
                         0 -> WelcomeStep()
                         1 -> IncomeStep(
@@ -109,60 +136,112 @@ fun OnboardingScreen(
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
-            Button(
-                onClick = {
-                    if (step < 2) {
-                        step += 1
-                    } else {
-                        val amount = parseAmount(incomeDigits)
-                        val income = if (amount > 0) {
-                            OnboardingIncome(incomeTitle, amount, incomeFrequency, incomeDayOfMonth, incomeDayOfWeek)
-                        } else {
-                            null
-                        }
-                        val expenses = expenseNames.mapNotNull { name ->
-                            val value = parseAmount(expenseDigits[name] ?: "")
-                            if (value > 0) OnboardingExpense(name, value) else null
-                        }
-                        onFinish(income, expenses)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 12.dp, top = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    when (step) {
+                PageDots(count = 3, current = step)
+                Spacer(Modifier.height(16.dp))
+                PrimaryButton(
+                    text = when (step) {
                         0 -> "Начать"
                         1 -> "Далее"
                         else -> "Готово"
                     },
+                    onClick = {
+                        if (step < 2) {
+                            step += 1
+                        } else {
+                            val amount = parseAmount(incomeDigits)
+                            val income = if (amount > 0) {
+                                OnboardingIncome(incomeTitle, amount, incomeFrequency, incomeDayOfMonth, incomeDayOfWeek)
+                            } else {
+                                null
+                            }
+                            val expenses = expenseNames.mapNotNull { name ->
+                                val value = parseAmount(expenseDigits[name] ?: "")
+                                if (value > 0) OnboardingExpense(name, value) else null
+                            }
+                            onFinish(income, expenses)
+                        }
+                    },
                 )
+                if (step > 0) {
+                    TextAction("Назад", onClick = { step -= 1 })
+                } else {
+                    Spacer(Modifier.height(44.dp))
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            SecondaryText("Шаг ${step + 1} из 3", modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
+    }
+}
+
+/** Точки страниц: активная растягивается в «капсулу». */
+@Composable
+private fun PageDots(count: Int, current: Int) {
+    val c = BudgetTheme.colors
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(count) { i ->
+            val width by animateDpAsState(
+                targetValue = if (i == current) 20.dp else 7.dp,
+                animationSpec = spring(dampingRatio = 0.75f, stiffness = 500f),
+                label = "dot",
+            )
+            Box(
+                Modifier.size(width = width, height = 7.dp).clip(CircleShape)
+                    .background(if (i == current) c.blue else c.tertiaryLabel),
+            )
         }
     }
 }
 
 @Composable
 private fun WelcomeStep() {
-    Column {
-        Text("Бюджет", style = MaterialTheme.typography.displaySmall)
-        Spacer(Modifier.height(12.dp))
+    val c = BudgetTheme.colors
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(32.dp))
+        Box(
+            Modifier
+                .size(96.dp)
+                .clip(RoundedCornerShape(26.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xFF5AC8FA), c.blue))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.AccountBalanceWallet, contentDescription = null, tint = Color.White, modifier = Modifier.size(54.dp))
+        }
+        Spacer(Modifier.height(24.dp))
+        Text("Бюджет", style = AppText.largeTitle, color = c.label)
+        Spacer(Modifier.height(8.dp))
         Text(
             "Спланируйте месяц заранее и узнайте, сколько денег останется свободными — в месяц и в неделю.",
-            style = MaterialTheme.typography.bodyLarge,
+            style = AppText.body,
+            color = c.secondaryLabel,
+            textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(24.dp))
-        listOf(
-            "Регулярные доходы и расходы по календарю",
-            "Точный расчёт: 4 или 5 суббот, 28–31 день",
-            "Работает без интернета, данные только у вас",
-        ).forEach {
-            Text("•  $it", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(vertical = 4.dp))
+        Spacer(Modifier.height(36.dp))
+        Feature(Icons.Rounded.CalendarMonth, c.blue, "По календарю", "Регулярные доходы и расходы в нужные даты")
+        Spacer(Modifier.height(22.dp))
+        Feature(Icons.Rounded.CheckCircle, c.green, "Точный расчёт", "Учитывает 4 или 5 суббот и 28–31 день")
+        Spacer(Modifier.height(22.dp))
+        Feature(Icons.Rounded.Lock, c.orange, "Только у вас", "Работает без интернета, данные остаются на телефоне")
+    }
+}
+
+@Composable
+private fun Feature(icon: ImageVector, tint: Color, title: String, text: String) {
+    val c = BudgetTheme.colors
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Box(
+            Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(tint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
         }
-        Spacer(Modifier.height(16.dp))
-        SecondaryText("Настройка займёт около минуты. Всё можно пропустить и добавить позже.")
+        Spacer(Modifier.width(16.dp))
+        Column {
+            Text(title, style = AppText.headline, color = c.label)
+            Text(text, style = AppText.subhead, color = c.secondaryLabel)
+        }
     }
 }
 
@@ -180,67 +259,76 @@ private fun IncomeStep(
     dayOfWeek: DayOfWeek,
     onDayOfWeek: (DayOfWeek) -> Unit,
 ) {
-    Column {
-        Text("Ваш основной доход", style = MaterialTheme.typography.headlineSmall)
+    val c = BudgetTheme.colors
+    Column(Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(8.dp))
+        Text("Ваш основной доход", style = AppText.title1, color = c.label)
+        Spacer(Modifier.height(6.dp))
+        Text("Его можно изменить позже в плане.", style = AppText.subhead, color = c.secondaryLabel)
+        Spacer(Modifier.height(20.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            incomeTitles.forEach { name -> PickerPill(name, selected = title == name, onClick = { onTitle(name) }) }
+        }
+        Spacer(Modifier.height(28.dp))
+        AmountField(digits = digits, onDigitsChange = onDigits, currencySymbol = currency.symbol)
+        Spacer(Modifier.height(28.dp))
+        SegmentedChoice(
+            options = listOf("Каждый месяц", "Каждую неделю"),
+            selectedIndex = if (frequency == Frequency.MONTHLY) 0 else 1,
+            onSelect = { onFrequency(if (it == 0) Frequency.MONTHLY else Frequency.WEEKLY) },
+        )
         Spacer(Modifier.height(16.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            incomeTitles.forEach { name ->
-                FilterChip(selected = title == name, onClick = { onTitle(name) }, label = { Text(name) })
+        GroupCard(Modifier.animateContentSize()) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    if (frequency == Frequency.MONTHLY) "Какого числа" else "В какой день недели",
+                    style = AppText.footnote,
+                    color = c.secondaryLabel,
+                )
+                Spacer(Modifier.height(10.dp))
+                if (frequency == Frequency.MONTHLY) {
+                    DayOfMonthPicker(dayOfMonth, onSelect = onDayOfMonth)
+                } else {
+                    WeekdayPicker(dayOfWeek, DayOfWeek.MONDAY, onSelect = onDayOfWeek)
+                }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
-            AmountField(digits = digits, onDigitsChange = onDigits, currencySymbol = currency.symbol)
-        }
-        Spacer(Modifier.height(16.dp))
-        SecondaryText("Как часто вы получаете")
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = frequency == Frequency.MONTHLY,
-                onClick = { onFrequency(Frequency.MONTHLY) },
-                label = { Text("Каждый месяц") },
-            )
-            FilterChip(
-                selected = frequency == Frequency.WEEKLY,
-                onClick = { onFrequency(Frequency.WEEKLY) },
-                label = { Text("Каждую неделю") },
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        if (frequency == Frequency.MONTHLY) {
-            SecondaryText("Какого числа")
-            Spacer(Modifier.height(8.dp))
-            DayOfMonthPicker(dayOfMonth, onSelect = onDayOfMonth)
-        } else {
-            SecondaryText("В какой день недели")
-            Spacer(Modifier.height(8.dp))
-            WeekdayPicker(dayOfWeek, DayOfWeek.MONDAY, onSelect = onDayOfWeek)
-        }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
 private fun ExpensesStep(currency: Currency, values: MutableMap<String, String>) {
-    Column {
-        Text("Основные расходы", style = MaterialTheme.typography.headlineSmall)
+    val c = BudgetTheme.colors
+    Column(Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(8.dp))
-        SecondaryText("Укажите то, что платите регулярно. Пустые поля можно пропустить.")
-        Spacer(Modifier.height(16.dp))
-        expenseNames.forEach { name ->
-            val suffix = if (name == "Продукты") "в неделю" else "в месяц"
-            OutlinedTextField(
-                value = values[name] ?: "",
-                onValueChange = { input ->
-                    values[name] = input.filter { it in '0'..'9' }.trimStart('0').take(12)
-                },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                singleLine = true,
-                label = { Text("$name · $suffix") },
-                suffix = { Text(currency.symbol) },
-                visualTransformation = ThousandsTransformation,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
+        Text("Основные расходы", style = AppText.title1, color = c.label)
+        Spacer(Modifier.height(6.dp))
+        Text("Укажите то, что платите регулярно. Пустые поля можно пропустить.", style = AppText.subhead, color = c.secondaryLabel)
+        Spacer(Modifier.height(20.dp))
+        GroupCard {
+            expenseNames.forEachIndexed { index, name ->
+                val suffix = if (name == "Продукты") "в неделю" else "в месяц"
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CategoryAvatar(expenseIcons[name] ?: "other")
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.width(112.dp)) {
+                        Text(name, style = AppText.body, color = c.label, maxLines = 1)
+                        Text(suffix, style = AppText.caption1, color = c.secondaryLabel)
+                    }
+                    InlineAmountField(
+                        digits = values[name] ?: "",
+                        onDigitsChange = { values[name] = it },
+                        currencySymbol = currency.symbol,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (index < expenseNames.lastIndex) RowDivider(start = 62.dp)
+            }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }

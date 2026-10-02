@@ -1,22 +1,15 @@
 package com.budgetplanner.app.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,12 +18,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.budgetplanner.app.ui.components.AppCard
 import com.budgetplanner.app.ui.components.CategoryAvatar
 import com.budgetplanner.app.ui.components.ConfirmDialog
-import com.budgetplanner.app.ui.components.SecondaryText
-import com.budgetplanner.app.ui.components.SectionTitle
+import com.budgetplanner.app.ui.components.GroupCard
+import com.budgetplanner.app.ui.components.LargeTitleScreen
+import com.budgetplanner.app.ui.components.NavBackButton
+import com.budgetplanner.app.ui.components.RowDivider
+import com.budgetplanner.app.ui.components.SectionFooter
+import com.budgetplanner.app.ui.components.SectionHeader
 import com.budgetplanner.app.ui.components.SegmentedChoice
+import com.budgetplanner.app.ui.components.SwipeToDeleteBox
+import com.budgetplanner.app.ui.components.groupShape
+import com.budgetplanner.app.ui.components.rowClickable
+import com.budgetplanner.app.ui.theme.AppText
+import com.budgetplanner.app.ui.theme.BudgetTheme
 import com.budgetplanner.domain.model.AppSettings
 import com.budgetplanner.domain.model.Category
 import com.budgetplanner.domain.model.EntryType
@@ -43,7 +44,7 @@ private enum class DataAction { DEMO, CLEAR }
 fun SettingsScreen(
     settings: AppSettings,
     customCategories: List<Category>,
-    padding: PaddingValues,
+    onBack: () -> Unit,
     onTheme: (ThemeMode) -> Unit,
     onFirstDay: (DayOfWeek) -> Unit,
     onLoadDemo: () -> Unit,
@@ -51,96 +52,117 @@ fun SettingsScreen(
     onDeleteCategory: (Category) -> Unit,
     onMessage: (String) -> Unit,
 ) {
+    val c = BudgetTheme.colors
     var pendingAction by remember { mutableStateOf<DataAction?>(null) }
     var pendingCategory by remember { mutableStateOf<Category?>(null) }
 
-    LazyColumn(
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = padding.calculateTopPadding() + 16.dp,
-            bottom = padding.calculateBottomPadding() + 24.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+    LargeTitleScreen(
+        title = "Настройки",
+        leading = { NavBackButton("Обзор", onBack) },
+        hasTabBar = false,
     ) {
-        item { Text("Настройки", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 4.dp)) }
-
-        item {
-            AppCard {
-                SectionTitle("Тема")
-                Spacer(Modifier.height(12.dp))
-                SegmentedChoice(
-                    options = listOf("Системная", "Светлая", "Тёмная"),
-                    selectedIndex = ThemeMode.entries.indexOf(settings.theme),
-                    onSelect = { onTheme(ThemeMode.entries[it]) },
-                )
-            }
-        }
-
-        item {
-            AppCard {
-                SectionTitle("Первый день недели")
-                Spacer(Modifier.height(12.dp))
-                SegmentedChoice(
-                    options = listOf("Понедельник", "Воскресенье"),
-                    selectedIndex = if (settings.firstDayOfWeek == DayOfWeek.SUNDAY) 1 else 0,
-                    onSelect = { onFirstDay(if (it == 1) DayOfWeek.SUNDAY else DayOfWeek.MONDAY) },
-                )
-            }
-        }
-
-        item {
-            AppCard {
-                SectionTitle("Валюта")
-                Spacer(Modifier.height(4.dp))
-                Text("Узбекский сум (${settings.currency.code})", style = MaterialTheme.typography.bodyLarge)
-                SecondaryText("Другие валюты появятся в следующих версиях.")
-            }
-        }
-
-        item {
-            AppCard {
-                SectionTitle("Свои категории")
-                Spacer(Modifier.height(4.dp))
-                if (customCategories.isEmpty()) {
-                    SecondaryText("Пока нет. Новую категорию можно создать при добавлении операции.")
-                } else {
-                    customCategories.forEach { category ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CategoryAvatar(category.icon, size = 36.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Text(category.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                            SecondaryText(if (category.type == EntryType.INCOME) "доход" else "расход")
-                            IconButton(onClick = { pendingCategory = category }) {
-                                Icon(Icons.Rounded.Delete, contentDescription = "Удалить категорию ${category.name}")
-                            }
-                        }
+        item(key = "appearance") {
+            Column {
+                SectionHeader("Оформление")
+                GroupCard {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Тема", style = AppText.body, color = c.label)
+                        Spacer(Modifier.height(10.dp))
+                        SegmentedChoice(
+                            options = listOf("Системная", "Светлая", "Тёмная"),
+                            selectedIndex = ThemeMode.entries.indexOf(settings.theme),
+                            onSelect = { onTheme(ThemeMode.entries[it]) },
+                        )
                     }
                 }
             }
         }
 
-        item {
-            AppCard {
-                SectionTitle("Данные")
-                Spacer(Modifier.height(4.dp))
-                SecondaryText("Демо-данные помогут быстро увидеть, как работает приложение.")
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = { pendingAction = DataAction.DEMO }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Загрузить демо-данные")
+        item(key = "calendar") {
+            Column {
+                SectionHeader("Календарь")
+                GroupCard {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Первый день недели", style = AppText.body, color = c.label)
+                        Spacer(Modifier.height(10.dp))
+                        SegmentedChoice(
+                            options = listOf("Понедельник", "Воскресенье"),
+                            selectedIndex = if (settings.firstDayOfWeek == DayOfWeek.SUNDAY) 1 else 0,
+                            onSelect = { onFirstDay(if (it == 1) DayOfWeek.SUNDAY else DayOfWeek.MONDAY) },
+                        )
+                    }
+                    RowDivider()
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {
+                        Text("Валюта", style = AppText.body, color = c.label, modifier = Modifier.weight(1f))
+                        Text("Узбекский сум (${settings.currency.code})", style = AppText.body, color = c.secondaryLabel)
+                    }
                 }
-                TextButton(onClick = { pendingAction = DataAction.CLEAR }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Удалить все данные", color = MaterialTheme.colorScheme.error)
-                }
+                SectionFooter("Другие валюты появятся в следующих версиях.")
             }
         }
 
-        item {
-            AppCard {
-                SectionTitle("О приложении")
-                Spacer(Modifier.height(4.dp))
-                Text("Бюджет · версия 1.0.0", style = MaterialTheme.typography.bodyLarge)
-                SecondaryText("Работает без интернета. Все данные хранятся только на этом устройстве.")
+        item(key = "categories-header") { SectionHeader("Свои категории") }
+        if (customCategories.isEmpty()) {
+            item(key = "categories-empty") {
+                GroupCard {
+                    Text(
+                        "Пока нет. Новую категорию можно создать при добавлении операции.",
+                        style = AppText.subhead,
+                        color = c.secondaryLabel,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+        } else {
+            itemsIndexed(customCategories, key = { _, cat -> "cat-${cat.id}" }) { index, category ->
+                SwipeToDeleteBox(
+                    shape = groupShape(index, customCategories.size),
+                    onDelete = { pendingCategory = category },
+                    removeImmediately = false,
+                ) {
+                    Column {
+                        Row(
+                            Modifier.fillMaxWidth().background(c.cell).padding(horizontal = 16.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CategoryAvatar(category.icon)
+                            Spacer(Modifier.width(12.dp))
+                            Text(category.name, style = AppText.body, color = c.label, modifier = Modifier.weight(1f))
+                            Text(
+                                if (category.type == EntryType.INCOME) "доход" else "расход",
+                                style = AppText.subhead,
+                                color = c.secondaryLabel,
+                            )
+                        }
+                        if (index < customCategories.lastIndex) RowDivider(start = 62.dp)
+                    }
+                }
+            }
+            item(key = "categories-hint") { SectionFooter("Смахните категорию влево, чтобы удалить.") }
+        }
+
+        item(key = "data") {
+            Column {
+                SectionHeader("Данные")
+                GroupCard {
+                    SettingsAction("Загрузить демо-данные", c.blue) { pendingAction = DataAction.DEMO }
+                    RowDivider()
+                    SettingsAction("Удалить все данные", c.red) { pendingAction = DataAction.CLEAR }
+                }
+                SectionFooter("Демо-данные помогут быстро увидеть, как работает приложение.")
+            }
+        }
+
+        item(key = "about") {
+            Column {
+                SectionHeader("О приложении")
+                GroupCard {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {
+                        Text("Версия", style = AppText.body, color = c.label, modifier = Modifier.weight(1f))
+                        Text("1.0.0", style = AppText.body, color = c.secondaryLabel)
+                    }
+                }
+                SectionFooter("Работает без интернета. Все данные хранятся только на этом устройстве.")
             }
         }
     }
@@ -184,5 +206,14 @@ fun SettingsScreen(
             },
             onDismiss = { pendingCategory = null },
         )
+    }
+}
+
+@Composable
+private fun SettingsAction(label: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().rowClickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 13.dp),
+    ) {
+        Text(label, style = AppText.body, color = color)
     }
 }

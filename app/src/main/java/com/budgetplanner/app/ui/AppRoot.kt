@@ -1,31 +1,63 @@
 package com.budgetplanner.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material.icons.rounded.SwapVert
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -41,7 +73,12 @@ import com.budgetplanner.app.presentation.OperationsViewModel
 import com.budgetplanner.app.presentation.PlanViewModel
 import com.budgetplanner.app.presentation.RootViewModel
 import com.budgetplanner.app.presentation.SettingsViewModel
+import com.budgetplanner.app.ui.components.IosEasing
+import com.budgetplanner.app.ui.components.ToastData
+import com.budgetplanner.app.ui.components.ToastPill
+import com.budgetplanner.app.ui.components.bouncyClickable
 import com.budgetplanner.app.ui.components.formatMoney
+import com.budgetplanner.app.ui.components.rememberTick
 import com.budgetplanner.app.ui.home.HomeScreen
 import com.budgetplanner.app.ui.onboarding.OnboardingScreen
 import com.budgetplanner.app.ui.operations.OperationsScreen
@@ -49,19 +86,21 @@ import com.budgetplanner.app.ui.operations.TransactionSheet
 import com.budgetplanner.app.ui.plan.PlanItemSheet
 import com.budgetplanner.app.ui.plan.PlanScreen
 import com.budgetplanner.app.ui.settings.SettingsScreen
+import com.budgetplanner.app.ui.theme.AppText
 import com.budgetplanner.app.ui.theme.BudgetTheme
 import com.budgetplanner.domain.model.AppSettings
 import com.budgetplanner.domain.model.EntryType
 import com.budgetplanner.domain.model.PlanItem
 import com.budgetplanner.domain.model.ThemeMode
 import com.budgetplanner.domain.model.Transaction
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+
+private const val ROUTE_SETTINGS = "settings"
 
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
-    Home("home", "Главная", Icons.Rounded.Home),
+    Home("home", "Обзор", Icons.Rounded.PieChart),
     Plan("plan", "План", Icons.Rounded.CalendarMonth),
     Operations("operations", "Операции", Icons.Rounded.SwapVert),
-    Settings("settings", "Настройки", Icons.Rounded.Settings),
 }
 
 /** Какая шторка сейчас открыта. */
@@ -113,58 +152,73 @@ private fun MainShell(root: RootViewModel, settings: AppSettings) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
+    val selectedTab = Tab.entries.firstOrNull { it.route == route } ?: Tab.Home
 
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     var sheet by remember { mutableStateOf<Sheet?>(null) }
 
-    fun message(text: String) {
-        scope.launch {
-            snackbar.currentSnackbarData?.dismiss()
-            snackbar.showSnackbar(text)
+    var toast by remember { mutableStateOf<ToastData?>(null) }
+    LaunchedEffect(toast?.id) {
+        if (toast != null) {
+            delay(4000)
+            toast = null
         }
     }
+    fun showToast(text: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+        toast = ToastData(System.nanoTime(), text, actionLabel, onAction)
+    }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            if (route != Tab.Settings.route) {
-                FloatingActionButton(onClick = { sheet = Sheet.NewTransaction(EntryType.EXPENSE) }) {
-                    Icon(Icons.Rounded.Add, contentDescription = "Добавить расход или доход")
+    Box(Modifier.fillMaxSize()) {
+        NavHost(
+            navController = nav,
+            startDestination = Tab.Home.route,
+            modifier = Modifier.fillMaxSize(),
+            enterTransition = {
+                if (targetState.destination.route == ROUTE_SETTINGS) {
+                    slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(380, easing = IosEasing))
+                } else {
+                    fadeIn(tween(260, easing = IosEasing)) + scaleIn(initialScale = 0.985f, animationSpec = tween(260, easing = IosEasing))
                 }
-            }
-        },
-        bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach { tab ->
-                    NavigationBarItem(
-                        selected = route == tab.route,
-                        onClick = {
-                            nav.navigate(tab.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon, contentDescription = null) },
-                        label = { Text(tab.label) },
+            },
+            exitTransition = {
+                if (targetState.destination.route == ROUTE_SETTINGS) {
+                    slideOutOfContainer(
+                        AnimatedContentTransitionScope.SlideDirection.Start,
+                        tween(380, easing = IosEasing),
+                        targetOffset = { it / 4 },
                     )
+                } else {
+                    fadeOut(tween(140))
                 }
-            }
-        },
-    ) { padding ->
-        NavHost(navController = nav, startDestination = Tab.Home.route) {
+            },
+            popEnterTransition = {
+                if (initialState.destination.route == ROUTE_SETTINGS) {
+                    slideIntoContainer(
+                        AnimatedContentTransitionScope.SlideDirection.End,
+                        tween(380, easing = IosEasing),
+                        initialOffset = { it / 4 },
+                    )
+                } else {
+                    fadeIn(tween(260, easing = IosEasing))
+                }
+            },
+            popExitTransition = {
+                if (initialState.destination.route == ROUTE_SETTINGS) {
+                    slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(380, easing = IosEasing))
+                } else {
+                    fadeOut(tween(140))
+                }
+            },
+        ) {
             composable(Tab.Home.route) {
                 val state by homeVm.uiState.collectAsStateWithLifecycle()
                 HomeScreen(
                     state = state,
                     month = month,
-                    padding = padding,
                     onPrevious = { root.previousMonth() },
                     onNext = { root.nextMonth() },
                     onReset = { root.resetMonth() },
                     onAddPlan = { sheet = Sheet.NewPlan(it) },
+                    onOpenSettings = { nav.navigate(ROUTE_SETTINGS) { launchSingleTop = true } },
                 )
             }
             composable(Tab.Plan.route) {
@@ -172,15 +226,14 @@ private fun MainShell(root: RootViewModel, settings: AppSettings) {
                 PlanScreen(
                     state = state,
                     month = month,
-                    padding = padding,
                     onPrevious = { root.previousMonth() },
                     onNext = { root.nextMonth() },
                     onReset = { root.resetMonth() },
                     onEdit = { sheet = Sheet.EditPlan(it) },
                     onAdd = { sheet = Sheet.NewPlan(it) },
-                    onDelete = {
-                        planVm.delete(it)
-                        message("Удалено из плана")
+                    onDelete = { item ->
+                        planVm.delete(item.id)
+                        showToast("Удалено из плана", "Отменить") { entryVm.savePlanItem(item.copy(id = 0L)) }
                     },
                 )
             }
@@ -189,30 +242,70 @@ private fun MainShell(root: RootViewModel, settings: AppSettings) {
                 OperationsScreen(
                     state = state,
                     month = month,
-                    padding = padding,
                     onPrevious = { root.previousMonth() },
                     onNext = { root.nextMonth() },
                     onReset = { root.resetMonth() },
                     onEdit = { sheet = Sheet.EditTransaction(it) },
-                    onDelete = {
-                        operationsVm.delete(it)
-                        message("Операция удалена")
+                    onDelete = { tx ->
+                        operationsVm.delete(tx.id)
+                        showToast("Операция удалена", "Отменить") { entryVm.saveTransaction(tx.copy(id = 0L)) }
                     },
                 )
             }
-            composable(Tab.Settings.route) {
+            composable(ROUTE_SETTINGS) {
                 val custom by settingsVm.customCategories.collectAsStateWithLifecycle()
                 SettingsScreen(
                     settings = settings,
                     customCategories = custom,
-                    padding = padding,
+                    onBack = { nav.popBackStack() },
                     onTheme = { settingsVm.setTheme(it) },
                     onFirstDay = { settingsVm.setFirstDayOfWeek(it) },
                     onLoadDemo = { settingsVm.loadDemoData() },
                     onClearData = { settingsVm.clearAllData() },
                     onDeleteCategory = { settingsVm.deleteCategory(it) },
-                    onMessage = { message(it) },
+                    onMessage = { showToast(it) },
                 )
+            }
+        }
+
+        // Плавающий таб-бар: прячется на экране настроек.
+        AnimatedVisibility(
+            visible = route != ROUTE_SETTINGS,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            enter = slideInVertically(tween(320, easing = IosEasing)) { it } + fadeIn(tween(220)),
+            exit = slideOutVertically(tween(260, easing = IosEasing)) { it } + fadeOut(tween(160)),
+        ) {
+            FloatingTabBar(
+                selected = selectedTab,
+                onSelect = { tab ->
+                    nav.navigate(tab.route) {
+                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onAdd = { sheet = Sheet.NewTransaction(EntryType.EXPENSE) },
+            )
+        }
+
+        // Тост сверху: выезжает и уезжает.
+        AnimatedContent(
+            targetState = toast,
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp),
+            transitionSpec = {
+                (slideInVertically(spring(dampingRatio = 0.75f, stiffness = 380f)) { -it * 2 } + fadeIn(tween(160))) togetherWith
+                    (slideOutVertically(tween(220, easing = IosEasing)) { -it * 2 } + fadeOut(tween(160))) using
+                    SizeTransform(clip = false)
+            },
+            label = "toast",
+        ) { data ->
+            if (data != null) {
+                ToastPill(data) {
+                    data.onAction?.invoke()
+                    toast = null
+                }
+            } else {
+                Box(Modifier.size(0.dp))
             }
         }
     }
@@ -234,11 +327,11 @@ private fun MainShell(root: RootViewModel, settings: AppSettings) {
                         onSave = { tx ->
                             entryVm.saveTransaction(tx)
                             val sign = if (tx.type == EntryType.INCOME) "Доход" else "Расход"
-                            message("$sign записан: ${formatMoney(tx.amount, settings.currency)}")
+                            showToast("$sign записан · ${formatMoney(tx.amount, settings.currency)}")
                         },
                         onDelete = { tx ->
                             entryVm.deleteTransaction(tx.id)
-                            message("Операция удалена")
+                            showToast("Операция удалена", "Отменить") { entryVm.saveTransaction(tx.copy(id = 0L)) }
                         },
                         onCreateCategory = { name, type, onCreated -> entryVm.addCategory(name, type, onCreated) },
                         onPlanInstead = { type -> sheet = Sheet.NewPlan(type) },
@@ -258,17 +351,90 @@ private fun MainShell(root: RootViewModel, settings: AppSettings) {
                         simulate = { draft -> entryVm.simulate(draft) },
                         onSave = { item ->
                             entryVm.savePlanItem(item)
-                            message("План обновлён")
+                            showToast("План обновлён")
                         },
                         onDelete = { item ->
                             entryVm.deletePlanItem(item.id)
-                            message("Удалено из плана")
+                            showToast("Удалено из плана", "Отменить") { entryVm.savePlanItem(item.copy(id = 0L)) }
                         },
                         onCreateCategory = { name, onCreated -> entryVm.addCategory(name, type, onCreated) },
                         onDismiss = { sheet = null },
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Плавающая «капсула» с вкладками и отдельная круглая кнопка «+» рядом — как в новых приложениях Apple.
+ * Подсветка выбранной вкладки плавно переезжает пружиной.
+ */
+@Composable
+private fun FloatingTabBar(selected: Tab, onSelect: (Tab) -> Unit, onAdd: () -> Unit) {
+    val c = BudgetTheme.colors
+    val tick = rememberTick()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BoxWithConstraints(
+            Modifier
+                .weight(1f)
+                .height(64.dp)
+                .shadow(14.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.10f), spotColor = Color.Black.copy(alpha = 0.18f))
+                .clip(CircleShape)
+                .background(c.bar)
+                .border(0.5.dp, c.separator, CircleShape)
+                .padding(4.dp),
+        ) {
+            val itemWidth = maxWidth / Tab.entries.size
+            val x by animateDpAsState(
+                targetValue = itemWidth * selected.ordinal,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
+                label = "tab-highlight",
+            )
+            Box(
+                Modifier.offset(x = x).width(itemWidth).fillMaxHeight().clip(CircleShape).background(c.fill),
+            )
+            Row(Modifier.fillMaxSize()) {
+                Tab.entries.forEach { tab ->
+                    val isSelected = tab == selected
+                    val tint by animateColorAsState(if (isSelected) c.blue else c.secondaryLabel, tween(200), label = "tab-tint")
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                                if (!isSelected) {
+                                    tick()
+                                    onSelect(tab)
+                                }
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(tab.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+                        Text(tab.label, style = AppText.caption2, color = tint, maxLines = 1)
+                    }
+                }
+            }
+        }
+
+        Box(
+            Modifier
+                .size(64.dp)
+                .bouncyClickable(scale = 0.9f, tick = true, onClick = onAdd)
+                .shadow(14.dp, CircleShape, clip = false, ambientColor = c.blue.copy(alpha = 0.2f), spotColor = c.blue.copy(alpha = 0.4f))
+                .clip(CircleShape)
+                .background(c.blue),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.Add, contentDescription = "Добавить расход или доход", tint = Color.White, modifier = Modifier.size(30.dp))
         }
     }
 }

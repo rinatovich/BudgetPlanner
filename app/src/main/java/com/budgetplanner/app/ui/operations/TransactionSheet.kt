@@ -1,56 +1,65 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-
 package com.budgetplanner.app.ui.operations
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.budgetplanner.app.ui.components.AmountField
 import com.budgetplanner.app.ui.components.AppBottomSheet
 import com.budgetplanner.app.ui.components.AppDatePickerDialog
-import com.budgetplanner.app.ui.components.CategoryChip
+import com.budgetplanner.app.ui.components.CategoryStrip
 import com.budgetplanner.app.ui.components.ConfirmDialog
+import com.budgetplanner.app.ui.components.FormRow
+import com.budgetplanner.app.ui.components.GroupCard
+import com.budgetplanner.app.ui.components.InlineTextField
 import com.budgetplanner.app.ui.components.NewCategoryDialog
-import com.budgetplanner.app.ui.components.SecondaryText
+import com.budgetplanner.app.ui.components.PrimaryButton
+import com.budgetplanner.app.ui.components.RowDivider
 import com.budgetplanner.app.ui.components.SegmentedChoice
+import com.budgetplanner.app.ui.components.SheetHorizontal
+import com.budgetplanner.app.ui.components.TextAction
+import com.budgetplanner.app.ui.components.bouncyClickable
 import com.budgetplanner.app.ui.components.dayLabel
 import com.budgetplanner.app.ui.components.formatMoney
 import com.budgetplanner.app.ui.components.parseAmount
+import com.budgetplanner.app.ui.components.rememberThud
+import com.budgetplanner.app.ui.theme.AppText
+import com.budgetplanner.app.ui.theme.BudgetTheme
 import com.budgetplanner.domain.model.Category
 import com.budgetplanner.domain.model.Currency
 import com.budgetplanner.domain.model.EntryType
 import com.budgetplanner.domain.model.Transaction
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 /**
  * Быстрое добавление операции (initial == null) или редактирование существующей.
  *
- * Быстрый режим: ввести сумму → нажать категорию → готово.
+ * Быстрый режим: ввести сумму → коснуться категории → готово.
  */
 @Composable
 fun TransactionSheet(
@@ -67,6 +76,7 @@ fun TransactionSheet(
     onPlanInstead: (EntryType) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val c = BudgetTheme.colors
     val isEdit = initial != null
     val today = remember { LocalDate.now() }
 
@@ -78,6 +88,7 @@ fun TransactionSheet(
     var date by remember { mutableStateOf(initial?.date ?: today) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     var extrasExpanded by remember { mutableStateOf(isEdit) }
+    var saving by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showNewCategory by remember { mutableStateOf(false) }
@@ -86,13 +97,17 @@ fun TransactionSheet(
     val categories = if (type == EntryType.EXPENSE) expenseCategories else incomeCategories
 
     AppBottomSheet(onDismiss = onDismiss) { dismiss ->
+        val scope = rememberCoroutineScope()
+        val thud = rememberThud()
 
         fun save(categoryId: Long) {
+            if (saving) return
             val amount = parseAmount(digits)
             if (amount <= 0L) {
                 amountError = true
                 return
             }
+            saving = true
             val name = categories.firstOrNull { it.id == categoryId }?.name ?: ""
             onSave(
                 Transaction(
@@ -105,24 +120,31 @@ fun TransactionSheet(
                     note = note.trim(),
                 ),
             )
+            thud()
             dismiss()
         }
 
-        if (isEdit) {
-            Text("Изменить операцию", style = MaterialTheme.typography.titleLarge)
-        } else {
-            SegmentedChoice(
-                options = listOf("Расход", "Доход"),
-                selectedIndex = if (type == EntryType.EXPENSE) 0 else 1,
-                onSelect = {
-                    type = if (it == 0) EntryType.EXPENSE else EntryType.INCOME
-                    selectedCategory = null
-                },
-            )
-        }
-        Spacer(Modifier.height(12.dp))
+        Column(Modifier.padding(horizontal = SheetHorizontal)) {
+            if (isEdit) {
+                Text(
+                    "Изменить операцию",
+                    style = AppText.title3,
+                    color = c.label,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                )
+            } else {
+                SegmentedChoice(
+                    options = listOf("Расход", "Доход"),
+                    selectedIndex = if (type == EntryType.EXPENSE) 0 else 1,
+                    onSelect = {
+                        type = if (it == 0) EntryType.EXPENSE else EntryType.INCOME
+                        selectedCategory = null
+                    },
+                )
+            }
+            Spacer(Modifier.height(20.dp))
 
-        Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
             AmountField(
                 digits = digits,
                 onDigitsChange = {
@@ -133,93 +155,94 @@ fun TransactionSheet(
                 autoFocus = !isEdit,
                 isError = amountError,
                 errorText = if (amountError) "Сумма должна быть больше 0" else null,
-                textStyle = MaterialTheme.typography.headlineLarge,
             )
-        }
 
-        if (!isEdit && type == EntryType.EXPENSE && lastExpense != null) {
-            Spacer(Modifier.height(12.dp))
-            AssistChip(
-                onClick = {
-                    onSave(lastExpense.copy(id = 0L, date = today))
-                    dismiss()
-                },
-                label = {
-                    Text(
-                        "Повторить: ${lastExpenseCategoryName ?: lastExpense.title} · " +
-                            formatMoney(lastExpense.amount, currency, withCurrency = false),
-                        maxLines = 1,
-                    )
-                },
-                leadingIcon = { Icon(Icons.Rounded.Repeat, contentDescription = null) },
-            )
-        }
-
-        Spacer(Modifier.height(16.dp))
-        SecondaryText(if (isEdit) "Категория" else "Выберите категорию — операция сохранится сразу")
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            categories.forEach { category ->
-                CategoryChip(
-                    category = category,
-                    selected = category.id == selectedCategory,
-                    onClick = {
-                        selectedCategory = category.id
-                        if (!isEdit) save(category.id)
-                    },
-                )
+            if (!isEdit && type == EntryType.EXPENSE && lastExpense != null) {
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    Row(
+                        Modifier
+                            .bouncyClickable(scale = 0.95f, tick = true) {
+                                onSave(lastExpense.copy(id = 0L, date = today))
+                                thud()
+                                dismiss()
+                            }
+                            .clip(CircleShape)
+                            .background(c.fill)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Rounded.Repeat, contentDescription = null, tint = c.blue, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Повторить: ${lastExpenseCategoryName ?: lastExpense.title} · " +
+                                formatMoney(lastExpense.amount, currency, withCurrency = false),
+                            style = AppText.subhead,
+                            color = c.label,
+                            maxLines = 1,
+                        )
+                    }
+                }
             }
-            AssistChip(
-                onClick = { showNewCategory = true },
-                label = { Text("Новая категория") },
-                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) },
+
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = if (isEdit) "Категория" else "Выберите категорию — операция сохранится сразу",
+                style = AppText.footnote,
+                color = c.secondaryLabel,
+                modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
             )
         }
 
-        Spacer(Modifier.height(8.dp))
-        if (extrasExpanded) {
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it.take(40) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Название (необязательно)") },
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { showDatePicker = true }) {
-                Icon(Icons.Rounded.CalendarMonth, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(dayLabel(date, today))
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it.take(200) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Комментарий") },
-                minLines = 2,
-            )
-        } else {
-            TextButton(onClick = { extrasExpanded = true }) { Text("Дата, название, комментарий") }
-        }
+        CategoryStrip(
+            categories = categories,
+            selectedId = selectedCategory,
+            onSelect = { category ->
+                selectedCategory = category.id
+                if (!isEdit) {
+                    // Даём кольцу выбора проявиться и только потом закрываем шторку.
+                    scope.launch {
+                        delay(160)
+                        save(category.id)
+                    }
+                }
+            },
+            onNew = { showNewCategory = true },
+            newLabel = "Новая",
+        )
 
-        if (isEdit) {
+        Column(Modifier.padding(horizontal = SheetHorizontal).animateContentSize()) {
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = {
+            if (extrasExpanded) {
+                GroupCard {
+                    FormRow("Название") {
+                        InlineTextField(title, { title = it.take(40) }, placeholder = "Необязательно", modifier = Modifier.weight(1f))
+                    }
+                    RowDivider()
+                    FormRow("Дата", onClick = { showDatePicker = true }) {
+                        Text(dayLabel(date, today), style = AppText.body, color = c.blue, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    }
+                    RowDivider()
+                    FormRow("Заметка") {
+                        InlineTextField(note, { note = it.take(200) }, placeholder = "Необязательно", modifier = Modifier.weight(1f))
+                    }
+                }
+            } else {
+                TextAction("Дата, название, заметка", onClick = { extrasExpanded = true }, modifier = Modifier.fillMaxWidth())
+            }
+
+            if (isEdit) {
+                Spacer(Modifier.height(16.dp))
+                PrimaryButton("Сохранить", onClick = {
                     val id = selectedCategory
                     if (id == null) amountError = parseAmount(digits) <= 0L else save(id)
-                },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-            ) { Text("Сохранить") }
-            TextButton(onClick = { showDelete = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Удалить", color = MaterialTheme.colorScheme.error)
-            }
-        } else {
-            TextButton(onClick = { onPlanInstead(type) }) {
-                Text(
-                    if (type == EntryType.EXPENSE) "Это регулярный расход? Добавить в план"
-                    else "Это регулярный доход? Добавить в план",
+                })
+                TextAction("Удалить", onClick = { showDelete = true }, color = c.red, modifier = Modifier.fillMaxWidth())
+            } else {
+                TextAction(
+                    text = if (type == EntryType.EXPENSE) "Это регулярный расход? Добавить в план" else "Это регулярный доход? Добавить в план",
+                    onClick = { onPlanInstead(type) },
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -247,7 +270,7 @@ fun TransactionSheet(
     if (showDelete && initial != null) {
         ConfirmDialog(
             title = "Удалить операцию?",
-            text = "Эту операцию нельзя будет вернуть.",
+            text = "Её можно будет вернуть сразу после удаления.",
             confirmLabel = "Удалить",
             onConfirm = {
                 showDelete = false

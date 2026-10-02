@@ -1,31 +1,22 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-
 package com.budgetplanner.app.ui.plan
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,21 +26,36 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.budgetplanner.app.ui.components.AmountField
 import com.budgetplanner.app.ui.components.AppBottomSheet
 import com.budgetplanner.app.ui.components.AppDatePickerDialog
-import com.budgetplanner.app.ui.components.CategoryChip
+import com.budgetplanner.app.ui.components.CategoryStrip
 import com.budgetplanner.app.ui.components.ConfirmDialog
 import com.budgetplanner.app.ui.components.DayOfMonthPicker
+import com.budgetplanner.app.ui.components.FormRow
+import com.budgetplanner.app.ui.components.GroupCard
+import com.budgetplanner.app.ui.components.InlineTextField
 import com.budgetplanner.app.ui.components.NewCategoryDialog
-import com.budgetplanner.app.ui.components.SecondaryText
-import com.budgetplanner.app.ui.components.SegmentedChoice
+import com.budgetplanner.app.ui.components.PickerPill
+import com.budgetplanner.app.ui.components.PrimaryButton
+import com.budgetplanner.app.ui.components.RowDivider
+import com.budgetplanner.app.ui.components.SectionFooter
+import com.budgetplanner.app.ui.components.SheetHorizontal
+import com.budgetplanner.app.ui.components.SwitchRow
+import com.budgetplanner.app.ui.components.TextAction
 import com.budgetplanner.app.ui.components.WeekdayPicker
+import com.budgetplanner.app.ui.components.animatedLong
+import com.budgetplanner.app.ui.components.bouncyClickable
 import com.budgetplanner.app.ui.components.formatMoney
 import com.budgetplanner.app.ui.components.frequencyLabel
 import com.budgetplanner.app.ui.components.fullDate
 import com.budgetplanner.app.ui.components.parseAmount
+import com.budgetplanner.app.ui.theme.AppText
+import com.budgetplanner.app.ui.theme.BudgetTheme
 import com.budgetplanner.domain.calc.ScenarioResult
 import com.budgetplanner.domain.model.Category
 import com.budgetplanner.domain.model.Currency
@@ -74,6 +80,7 @@ fun PlanItemSheet(
     onCreateCategory: (String, (Long) -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val c = BudgetTheme.colors
     val today = remember { LocalDate.now() }
     val isExpense = type == EntryType.EXPENSE
 
@@ -88,7 +95,7 @@ fun PlanItemSheet(
     var essential by remember { mutableStateOf(initial?.isEssential ?: false) }
     var essentialTouched by remember { mutableStateOf(initial != null) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
-    var noteExpanded by remember { mutableStateOf(!initial?.note.isNullOrEmpty()) }
+    var detailsExpanded by remember { mutableStateOf(!initial?.note.isNullOrEmpty()) }
     var active by remember { mutableStateOf(initial?.isActive ?: true) }
 
     var showDatePicker by remember { mutableStateOf(false) }
@@ -140,31 +147,19 @@ fun PlanItemSheet(
     }
 
     AppBottomSheet(onDismiss = onDismiss) { dismiss ->
-        Text(
-            text = when {
-                initial != null -> "Изменить"
-                isExpense -> "Новый плановый расход"
-                else -> "Новый плановый доход"
-            },
-            style = MaterialTheme.typography.titleLarge,
-        )
-        Spacer(Modifier.height(16.dp))
-
-        SecondaryText("Категория")
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            categories.forEach { category ->
-                CategoryChip(category, selected = category.id == categoryId, onClick = { categoryId = category.id })
-            }
-            AssistChip(
-                onClick = { showNewCategory = true },
-                label = { Text("Новая") },
-                leadingIcon = { Icon(Icons.Rounded.Add, contentDescription = null) },
+        Column(Modifier.padding(horizontal = SheetHorizontal)) {
+            Text(
+                text = when {
+                    initial != null -> "Изменить"
+                    isExpense -> "Новый плановый расход"
+                    else -> "Новый плановый доход"
+                },
+                style = AppText.title3,
+                color = c.label,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             )
-        }
-        Spacer(Modifier.height(16.dp))
-
-        Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Spacer(Modifier.height(20.dp))
             AmountField(
                 digits = amountDigits,
                 onDigitsChange = {
@@ -172,118 +167,113 @@ fun PlanItemSheet(
                     amountError = false
                 },
                 currencySymbol = currency.symbol,
+                autoFocus = initial == null,
                 isError = amountError,
                 errorText = if (amountError) "Сумма должна быть больше 0" else null,
             )
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "Категория",
+                style = AppText.footnote,
+                color = c.secondaryLabel,
+                modifier = Modifier.padding(start = 4.dp, bottom = 10.dp),
+            )
         }
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it.take(40) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Название (необязательно)") },
+
+        CategoryStrip(
+            categories = categories,
+            selectedId = categoryId,
+            onSelect = { categoryId = it.id },
+            onNew = { showNewCategory = true },
         )
-        Spacer(Modifier.height(16.dp))
 
-        SecondaryText("Как часто")
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            frequencies.forEach { f ->
-                FilterChip(
-                    selected = frequency == f,
-                    onClick = { frequency = f },
-                    label = { Text(frequencyLabel(f)) },
-                )
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-
-        when (frequency) {
-            Frequency.WEEKLY -> {
-                SecondaryText("День недели")
-                Spacer(Modifier.height(8.dp))
-                WeekdayPicker(dayOfWeek, firstDayOfWeek, onSelect = { dayOfWeek = it })
-            }
-            Frequency.MONTHLY -> {
-                SecondaryText("День месяца")
-                Spacer(Modifier.height(8.dp))
-                DayOfMonthPicker(dayOfMonth, onSelect = { dayOfMonth = it })
-            }
-            Frequency.ONCE, Frequency.YEARLY -> {
-                SecondaryText(if (frequency == Frequency.ONCE) "Дата" else "Дата (повторяется каждый год)")
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { showDatePicker = true }) {
-                    Icon(Icons.Rounded.CalendarMonth, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(fullDate(date))
-                }
-            }
-            Frequency.DAILY -> SecondaryText("Операция повторяется каждый день месяца.")
-        }
-
-        if (isExpense) {
+        Column(Modifier.padding(horizontal = SheetHorizontal)) {
             Spacer(Modifier.height(16.dp))
-            SegmentedChoice(
-                options = listOf("Обязательный", "Необязательный"),
-                selectedIndex = if (essential) 0 else 1,
-                onSelect = {
-                    essential = it == 0
-                    essentialTouched = true
-                },
-            )
-        }
 
-        Spacer(Modifier.height(8.dp))
-        if (noteExpanded) {
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it.take(200) },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Комментарий") },
-                minLines = 2,
-            )
-        } else {
-            TextButton(onClick = { noteExpanded = true }) { Text("Добавить комментарий") }
-        }
-
-        if (initial != null) {
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text("Учитывать в плане", style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = active, onCheckedChange = { active = it })
-            }
-        }
-
-        if (preview != null && preview.delta != 0L) {
-            Spacer(Modifier.height(8.dp))
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                androidx.compose.foundation.layout.Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "Свободно в месяце: было → станет",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "${formatMoney(preview.freeBefore, currency)} → ${formatMoney(preview.freeAfter, currency)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
+            GroupCard(Modifier.animateContentSize()) {
+                Text(
+                    "Как часто",
+                    style = AppText.footnote,
+                    color = c.secondaryLabel,
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
+                )
+                LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(frequencies.size) { i ->
+                        val f = frequencies[i]
+                        PickerPill(frequencyLabel(f), selected = frequency == f, onClick = { frequency = f })
+                    }
+                }
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    when (frequency) {
+                        Frequency.WEEKLY -> WeekdayPicker(dayOfWeek, firstDayOfWeek, onSelect = { dayOfWeek = it })
+                        Frequency.MONTHLY -> DayOfMonthPicker(dayOfMonth, onSelect = { dayOfMonth = it })
+                        Frequency.ONCE, Frequency.YEARLY -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (frequency == Frequency.ONCE) "Дата" else "Повторяется каждый год",
+                                style = AppText.body,
+                                color = c.label,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                fullDate(date),
+                                style = AppText.body.copy(fontWeight = FontWeight.Medium),
+                                color = c.blue,
+                                modifier = Modifier
+                                    .bouncyClickable(scale = 0.94f) { showDatePicker = true }
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(c.blue.copy(alpha = 0.12f))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            )
+                        }
+                        Frequency.DAILY -> Text("Операция повторяется каждый день месяца.", style = AppText.subhead, color = c.secondaryLabel)
+                    }
                 }
             }
-        }
 
-        Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = {
+            if (isExpense || initial != null) {
+                Spacer(Modifier.height(16.dp))
+                GroupCard {
+                    if (isExpense) {
+                        SwitchRow("Обязательный расход", essential, onCheckedChange = {
+                            essential = it
+                            essentialTouched = true
+                        })
+                    }
+                    if (isExpense && initial != null) RowDivider()
+                    if (initial != null) SwitchRow("Учитывать в плане", active, onCheckedChange = { active = it })
+                }
+            }
+
+            Column(Modifier.animateContentSize()) {
+                Spacer(Modifier.height(8.dp))
+                if (detailsExpanded) {
+                    GroupCard {
+                        FormRow("Название") {
+                            InlineTextField(title, { title = it.take(40) }, placeholder = "Необязательно", modifier = Modifier.weight(1f))
+                        }
+                        RowDivider()
+                        FormRow("Заметка") {
+                            InlineTextField(note, { note = it.take(200) }, placeholder = "Необязательно", modifier = Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    TextAction("Название и заметка", onClick = { detailsExpanded = true }, modifier = Modifier.fillMaxWidth())
+                }
+            }
+
+            AnimatedVisibility(
+                visible = preview != null && preview.delta != 0L,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                if (preview != null) PreviewCard(preview, currency)
+            }
+
+            Spacer(Modifier.height(16.dp))
+            PrimaryButton("Сохранить", onClick = {
                 val item = buildItem()
                 if (item == null || item.amount <= 0L) {
                     amountError = true
@@ -291,13 +281,9 @@ fun PlanItemSheet(
                     onSave(item)
                     dismiss()
                 }
-            },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text("Сохранить") }
-
-        if (initial != null) {
-            TextButton(onClick = { showDelete = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Удалить", color = MaterialTheme.colorScheme.error)
+            })
+            if (initial != null) {
+                TextAction("Удалить", onClick = { showDelete = true }, color = c.red, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -324,7 +310,7 @@ fun PlanItemSheet(
     if (showDelete && initial != null) {
         ConfirmDialog(
             title = "Удалить «${initial.title}»?",
-            text = "Операция исчезнет из плана во всех месяцах.",
+            text = "Операция исчезнет из плана во всех месяцах. Удаление можно отменить.",
             confirmLabel = "Удалить",
             onConfirm = {
                 showDelete = false
@@ -333,5 +319,41 @@ fun PlanItemSheet(
             },
             onDismiss = { showDelete = false },
         )
+    }
+}
+
+/** «Было → станет»: влияние на свободный остаток месяца, цифры плавно докручиваются. */
+@Composable
+private fun PreviewCard(preview: ScenarioResult, currency: Currency) {
+    val c = BudgetTheme.colors
+    val after = animatedLong(preview.freeAfter)
+    val positive = preview.delta > 0
+    Column(Modifier.padding(top = 16.dp)) {
+        GroupCard {
+            Column(Modifier.padding(16.dp)) {
+                Text("Свободно в месяце", style = AppText.footnote, color = c.secondaryLabel)
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        formatMoney(preview.freeBefore, currency, withCurrency = false),
+                        style = AppText.body.copy(fontFeatureSettings = "tnum"),
+                        color = c.secondaryLabel,
+                    )
+                    Text("  →  ", style = AppText.body, color = c.tertiaryLabel)
+                    Text(
+                        formatMoney(after, currency),
+                        style = AppText.headline.copy(fontFeatureSettings = "tnum"),
+                        color = if (after < 0) c.red else c.label,
+                    )
+                }
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    formatMoney(preview.delta, currency, showPlus = true),
+                    style = AppText.footnote.copy(fontFeatureSettings = "tnum"),
+                    color = if (positive) c.green else c.red,
+                )
+            }
+        }
+        SectionFooter("Так изменится остаток после сохранения.")
     }
 }

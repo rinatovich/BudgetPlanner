@@ -1,46 +1,53 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package com.budgetplanner.app.ui.plan
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.budgetplanner.app.presentation.PlanRow
 import com.budgetplanner.app.presentation.PlanUiState
 import com.budgetplanner.app.ui.components.CategoryAvatar
-import com.budgetplanner.app.ui.components.ConfirmDialog
 import com.budgetplanner.app.ui.components.EmptyState
+import com.budgetplanner.app.ui.components.LargeTitleScreen
+import com.budgetplanner.app.ui.components.LoadingRow
 import com.budgetplanner.app.ui.components.MonthSwitcher
-import com.budgetplanner.app.ui.components.SecondaryText
+import com.budgetplanner.app.ui.components.PrimaryButton
+import com.budgetplanner.app.ui.components.RowDivider
+import com.budgetplanner.app.ui.components.SectionHeader
 import com.budgetplanner.app.ui.components.SwipeToDeleteBox
+import com.budgetplanner.app.ui.components.TextAction
+import com.budgetplanner.app.ui.components.TodayChip
 import com.budgetplanner.app.ui.components.formatMoney
 import com.budgetplanner.app.ui.components.frequencyUnit
+import com.budgetplanner.app.ui.components.groupShape
+import com.budgetplanner.app.ui.components.rowClickable
 import com.budgetplanner.app.ui.components.scheduleText
+import com.budgetplanner.app.ui.theme.AppText
 import com.budgetplanner.app.ui.theme.BudgetTheme
+import com.budgetplanner.app.ui.theme.MoneyStyles
 import com.budgetplanner.domain.calc.MoneyFormat
 import com.budgetplanner.domain.model.Currency
 import com.budgetplanner.domain.model.EntryType
@@ -52,78 +59,37 @@ import java.time.YearMonth
 fun PlanScreen(
     state: PlanUiState?,
     month: YearMonth,
-    padding: PaddingValues,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onReset: () -> Unit,
     onEdit: (PlanItem) -> Unit,
     onAdd: (EntryType) -> Unit,
-    onDelete: (Long) -> Unit,
+    onDelete: (PlanItem) -> Unit,
 ) {
-    var pendingDelete by remember { mutableStateOf<PlanItem?>(null) }
-
-    LazyColumn(
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = padding.calculateTopPadding() + 4.dp,
-            bottom = padding.calculateBottomPadding() + 96.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+    LargeTitleScreen(
+        title = "План",
+        titleAccessory = { TodayChip(visible = month != YearMonth.now(), onClick = onReset) },
     ) {
-        item { MonthSwitcher(month, onPrevious, onNext, onReset) }
+        item(key = "month") { MonthSwitcher(month, onPrevious, onNext, onReset) }
 
         if (state == null) {
-            item {
-                Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+            item(key = "loading") { LoadingRow() }
+        } else if (state.incomes.isEmpty() && state.expenses.isEmpty()) {
+            item(key = "empty") {
+                EmptyState(
+                    icon = Icons.Rounded.CalendarMonth,
+                    title = "План пока пуст",
+                    subtitle = "Добавьте регулярные доходы и расходы: зарплату, аренду, кредиты, еженедельные покупки.",
+                ) {
+                    PrimaryButton("Добавить доход", onClick = { onAdd(EntryType.INCOME) })
+                    Spacer(Modifier.height(4.dp))
+                    TextAction("Добавить расход", onClick = { onAdd(EntryType.EXPENSE) })
                 }
             }
         } else {
-            if (state.incomes.isEmpty() && state.expenses.isEmpty()) {
-                item {
-                    EmptyState(
-                        icon = Icons.Rounded.CalendarMonth,
-                        title = "План пока пуст",
-                        subtitle = "Добавьте регулярные доходы и расходы: зарплату, аренду, кредиты, еженедельные покупки.",
-                    )
-                }
-            }
-            planSection(
-                title = "Доходы",
-                type = EntryType.INCOME,
-                rows = state.incomes,
-                currency = state.currency,
-                addLabel = "Добавить доход",
-                onEdit = onEdit,
-                onAdd = onAdd,
-                onRequestDelete = { pendingDelete = it },
-            )
-            planSection(
-                title = "Расходы",
-                type = EntryType.EXPENSE,
-                rows = state.expenses,
-                currency = state.currency,
-                addLabel = "Добавить расход",
-                onEdit = onEdit,
-                onAdd = onAdd,
-                onRequestDelete = { pendingDelete = it },
-            )
+            planSection("Доходы", EntryType.INCOME, state.incomes, state.currency, "Добавить доход", onEdit, onAdd, onDelete)
+            planSection("Расходы", EntryType.EXPENSE, state.expenses, state.currency, "Добавить расход", onEdit, onAdd, onDelete)
         }
-    }
-
-    val target = pendingDelete
-    if (target != null) {
-        ConfirmDialog(
-            title = "Удалить «${target.title}»?",
-            text = "Операция исчезнет из плана во всех месяцах.",
-            confirmLabel = "Удалить",
-            onConfirm = {
-                onDelete(target.id)
-                pendingDelete = null
-            },
-            onDismiss = { pendingDelete = null },
-        )
     }
 }
 
@@ -135,70 +101,88 @@ private fun LazyListScope.planSection(
     addLabel: String,
     onEdit: (PlanItem) -> Unit,
     onAdd: (EntryType) -> Unit,
-    onRequestDelete: (PlanItem) -> Unit,
+    onDelete: (PlanItem) -> Unit,
 ) {
     val activeTotal = rows.filter { it.item.isActive }.sumOf { it.monthTotal }
-    item {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 12.dp, start = 4.dp, end = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+    val count = rows.size + 1
+
+    item(key = "header-$title") {
+        SectionHeader(title, trailing = "в месяце " + formatMoney(activeTotal, currency, showPlus = type == EntryType.INCOME))
+    }
+    itemsIndexed(rows, key = { _, row -> "plan-${row.item.id}" }) { index, row ->
+        SwipeToDeleteBox(
+            shape = groupShape(index, count),
+            onDelete = { onDelete(row.item) },
+            modifier = Modifier.animateItemPlacement(),
         ) {
-            Text(title.uppercase(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            SecondaryText("в месяце: " + formatMoney(activeTotal, currency))
+            PlanRowContent(row, currency, onClick = { onEdit(row.item) })
         }
     }
-    items(rows.size, key = { rows[it].item.id }) { index ->
-        val row = rows[index]
-        SwipeToDeleteBox(onRequestDelete = { onRequestDelete(row.item) }) {
-            PlanRowCard(row, currency, onClick = { onEdit(row.item) })
-        }
-    }
-    item {
-        TextButton(onClick = { onAdd(type) }) {
-            Icon(Icons.Rounded.Add, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(addLabel)
-        }
+    item(key = "add-$title") {
+        AddRow(addLabel, groupShape(rows.size, count), { onAdd(type) }, Modifier.animateItemPlacement())
     }
 }
 
 @Composable
-private fun PlanRowCard(row: PlanRow, currency: Currency, onClick: () -> Unit) {
+private fun PlanRowContent(row: PlanRow, currency: Currency, onClick: () -> Unit) {
+    val c = BudgetTheme.colors
     val item = row.item
     val isIncome = item.type == EntryType.INCOME
+    val multiple = item.frequency == Frequency.WEEKLY || item.frequency == Frequency.DAILY
     val subtitle = buildString {
         if (!item.isActive) append("Отключено · ")
         append(scheduleText(item))
-        if (!isIncome) append(if (item.isEssential) " · обязательный" else " · необязательный")
+        if (multiple) append(" · ${row.occurrences}× = ${MoneyFormat.compact(row.monthTotal)}")
     }
-    Surface(
-        onClick = onClick,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.fillMaxWidth().alpha(if (item.isActive) 1f else 0.55f),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.alpha(if (item.isActive) 1f else 0.5f)) {
+        Row(
+            Modifier.fillMaxWidth().rowClickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             CategoryAvatar(row.category?.icon ?: "other")
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(item.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-                SecondaryText(subtitle)
-                if (item.frequency == Frequency.WEEKLY || item.frequency == Frequency.DAILY) {
-                    SecondaryText("${row.occurrences}× в этом месяце = ${MoneyFormat.compact(row.monthTotal)}")
-                }
+                Text(item.title, style = AppText.body, color = c.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, style = AppText.footnote, color = c.secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(8.dp))
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = formatMoney(item.amount, currency, showPlus = isIncome, withCurrency = false),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (isIncome) BudgetTheme.extra.income else MaterialTheme.colorScheme.onSurface,
+                    style = MoneyStyles.row,
+                    color = if (isIncome) c.green else c.label,
                     maxLines = 1,
                 )
                 val unit = frequencyUnit(item.frequency)
-                SecondaryText(if (unit.isEmpty()) currency.symbol else "${currency.symbol} $unit")
+                Text(
+                    text = if (unit.isEmpty()) currency.symbol else "${currency.symbol} $unit",
+                    style = AppText.caption1,
+                    color = c.secondaryLabel,
+                )
             }
         }
+        RowDivider(start = 62.dp)
+    }
+}
+
+@Composable
+private fun AddRow(label: String, shape: RoundedCornerShape, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = BudgetTheme.colors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .rowClickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Rounded.Add,
+            contentDescription = null,
+            tint = c.blue,
+            modifier = Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(c.blue.copy(alpha = 0.12f)).padding(6.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = AppText.body, color = c.blue)
     }
 }
